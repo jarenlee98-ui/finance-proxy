@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -40,24 +39,41 @@ app.get('/stock/:ticker', async (req, res) => {
   }
 });
 
-// ── NYSE market news ──────────────────────────────────────────────────────────
+// ── NYSE / NASDAQ stock market news only ──────────────────────────────────────
 app.get('/news', async (req, res) => {
   try {
     const response = await fetch(
       `https://finnhub.io/api/v1/news?category=general&token=${process.env.FINNHUB_API_KEY}`
     );
     const data = await response.json();
-    // Filter out crypto, keep stock market news only
+
+    const BLOCK_WORDS = [
+      // Crypto
+      'crypto', 'bitcoin', 'ethereum', 'btc', 'eth', 'coin', 'token', 'blockchain', 'defi', 'nft',
+      // Commodities
+      'gold', 'silver', 'oil', 'crude', 'commodity', 'commodities', 'wheat', 'corn', 'copper', 'natural gas',
+      // Forex & macro
+      'forex', 'currency', 'dollar index', 'eur/usd', 'gbp/usd', 'usd/jpy', 'yuan', 'peso', 'rupee',
+      // Bonds & rates
+      'treasury', 'bond yield', '10-year', 'gilt', 'bund',
+    ];
+
+    const REQUIRE_WORDS = [
+      'stock', 'stocks', 'equity', 'equities', 'shares', 'earnings', 'ipo', 'nasdaq', 'nyse',
+      's&p', 'dow', 'wall street', 'market', 'investor', 'trading', 'rally', 'selloff', 'sell-off',
+      'quarter', 'revenue', 'profit', 'loss', 'guidance', 'analyst', 'upgrade', 'downgrade',
+    ];
+
     const filtered = data
       .filter(n => {
-        const text = (n.headline + ' ' + n.category).toLowerCase();
-        return !text.includes('crypto') &&
-               !text.includes('bitcoin') &&
-               !text.includes('ethereum') &&
-               !text.includes('btc') &&
-               !text.includes('coin');
+        const text = (n.headline + ' ' + (n.category || '') + ' ' + (n.summary || '')).toLowerCase();
+        const blocked = BLOCK_WORDS.some(w => text.includes(w));
+        const relevant = REQUIRE_WORDS.some(w => text.includes(w));
+        const isGeneralOrBusiness = ['general', 'business'].includes((n.category || '').toLowerCase());
+        return !blocked && relevant && isGeneralOrBusiness;
       })
       .slice(0, 6);
+
     res.json(filtered);
   } catch (e) {
     res.status(500).json({ error: e.message });
