@@ -82,3 +82,21 @@ app.get('/news', async (req, res) => {
       'stock', 'stocks', 'equity', 'equities', 'shares', 'earnings', 'ipo', 'nasdaq', 'nyse',
       's&p', 'dow', 'wall street', 'market', 'investor', 'trading', 'rally', 'selloff', 'sell-off',
       'quarter', 'revenue', 'profit', 'loss', 'guidance', 'analyst', 'upgrade', 'downgrade',
+    ];
+    const filtered = data
+      .filter(n => {
+        const text = (n.headline + ' ' + (n.category || '') + ' ' + (n.summary || '')).toLowerCase();
+        const blocked = BLOCK_WORDS.some(w => text.includes(w));
+        const relevant = REQUIRE_WORDS.some(w => text.includes(w));
+        const isGeneralOrBusiness = ['general', 'business'].includes((n.category || '').toLowerCase());
+        return !blocked && relevant && isGeneralOrBusiness;
+      })
+      .slice(0, 6);
+    res.json(filtered);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => console.log(`Proxy running on port ${PORT}`));
