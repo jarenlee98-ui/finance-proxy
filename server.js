@@ -87,6 +87,20 @@ app.post('/chat', async (req, res) => {
   }
 });
 
+// ── Company profile (for auto name lookup) ────────────────────────────────────
+app.get('/stock/profile/:ticker', async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    const response = await fetch(
+      `https://finnhub.io/api/v1/stock/profile2?symbol=${ticker}&token=${process.env.FINNHUB_API_KEY}`
+    );
+    const data = await response.json();
+    res.json({ name: data.name || null, logo: data.logo || null, exchange: data.exchange || null });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Live stock quote ──────────────────────────────────────────────────────────
 app.get('/stock/:ticker', async (req, res) => {
   try {
