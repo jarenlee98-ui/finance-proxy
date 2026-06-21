@@ -1,8 +1,34 @@
 const express = require('express');
 const cors = require('cors');
+const { Pool } = require('pg');
+
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// ── PostgreSQL connection ─────────────────────────────────────────────────────
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+// ── DB connection test ────────────────────────────────────────────────────────
+app.get('/db-test', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW() as current_time');
+    res.json({
+      success: true,
+      message: 'Database connected!',
+      time: result.rows[0].current_time
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Database connection failed',
+      error: err.message
+    });
+  }
+});
 
 // ── Claude proxy ──────────────────────────────────────────────────────────────
 app.post('/chat', async (req, res) => {
@@ -46,39 +72,13 @@ app.get('/news', async (req, res) => {
       `https://finnhub.io/api/v1/news?category=general&token=${process.env.FINNHUB_API_KEY}`
     );
     const data = await response.json();
-
     const BLOCK_WORDS = [
-      // Crypto
       'crypto', 'bitcoin', 'ethereum', 'btc', 'eth', 'coin', 'token', 'blockchain', 'defi', 'nft',
-      // Commodities
       'gold', 'silver', 'oil', 'crude', 'commodity', 'commodities', 'wheat', 'corn', 'copper', 'natural gas',
-      // Forex & macro
       'forex', 'currency', 'dollar index', 'eur/usd', 'gbp/usd', 'usd/jpy', 'yuan', 'peso', 'rupee',
-      // Bonds & rates
       'treasury', 'bond yield', '10-year', 'gilt', 'bund',
     ];
-
     const REQUIRE_WORDS = [
       'stock', 'stocks', 'equity', 'equities', 'shares', 'earnings', 'ipo', 'nasdaq', 'nyse',
       's&p', 'dow', 'wall street', 'market', 'investor', 'trading', 'rally', 'selloff', 'sell-off',
       'quarter', 'revenue', 'profit', 'loss', 'guidance', 'analyst', 'upgrade', 'downgrade',
-    ];
-
-    const filtered = data
-      .filter(n => {
-        const text = (n.headline + ' ' + (n.category || '') + ' ' + (n.summary || '')).toLowerCase();
-        const blocked = BLOCK_WORDS.some(w => text.includes(w));
-        const relevant = REQUIRE_WORDS.some(w => text.includes(w));
-        const isGeneralOrBusiness = ['general', 'business'].includes((n.category || '').toLowerCase());
-        return !blocked && relevant && isGeneralOrBusiness;
-      })
-      .slice(0, 6);
-
-    res.json(filtered);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Proxy running on port ${PORT}`));
