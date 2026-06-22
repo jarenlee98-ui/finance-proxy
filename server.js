@@ -13,7 +13,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-// Create store table on startup
 pool.query(`
   CREATE TABLE IF NOT EXISTS kv_store (
     key TEXT PRIMARY KEY,
@@ -116,7 +115,6 @@ app.get('/stock/:ticker', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
 // ── Gemini e-statement parser ─────────────────────────────────────────────────
 app.post('/parse-statement', upload.single('pdf'), async (req, res) => {
   try {
@@ -163,8 +161,6 @@ Return format: [{"date":"Jun 1","merchant":"Grab","amount":-12.50,"category":"Tr
 
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    // Strip markdown fences if present
     const clean = text.replace(/```json|```/g, '').trim();
     const transactions = JSON.parse(clean);
 
@@ -173,4 +169,7 @@ Return format: [{"date":"Jun 1","merchant":"Grab","amount":-12.50,"category":"Tr
     res.status(500).json({ error: e.message });
   }
 });
+
+// ── Start server ──────────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => console.log(`Proxy running on port ${PORT}`));
