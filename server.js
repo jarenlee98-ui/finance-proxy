@@ -1,7 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
-
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -116,4 +117,60 @@ app.get('/stock/:ticker', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+// ── Gemini e-statement parser ─────────────────────────────────────────────────
+app.post('/parse-statement', upload.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No PDF uploaded' });
+
+    const base64Pdf = req.file.buffer.toString('base64');
+
+    const prompt = `You are a bank statement parser. Extract all transactions from this bank statement PDF.
+
+Return ONLY a valid JSON array, no markdown, no explanation. Each item must have:
+- date: string (e.g. "Jun 1")
+- merchant: string (the description/payee)
+- amount: number (negative for expenses/debits, positive for credits/income)
+- category: one of exactly these: "Groceries", "Subscriptions", "Transport", "Food & Drink", "Shopping", "Health", "Bills", "Entertainment", "Other"
+
+Auto-categorize based on merchant name. Examples:
+- Grab, Touch n Go, parking → Transport
+- Netflix, Spotify, Apple → Subscriptions
+- Watson, Guardian, clinic → Health
+- Uniqlo, Shopee, Lazada → Shopping
+- Starbucks, McDonald's, restaurant → Food & Drink
+- TNB, Celcom, Maxis, Astro → Bills
+- Cinema, games → Entertainment
+- Supermarket, grocery → Groceries
+- Salary, transfer in → positive amount, Other
+
+Return format: [{"date":"Jun 1","merchant":"Grab","amount":-12.50,"category":"Transport"}, ...]`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: 'application/pdf', data: base64Pdf } }
+            ]
+          }]
+        })
+      }
+    );
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    // Strip markdown fences if present
+    const clean = text.replace(/```json|```/g, '').trim();
+    const transactions = JSON.parse(clean);
+
+    res.json({ transactions });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 app.listen(PORT, '0.0.0.0', () => console.log(`Proxy running on port ${PORT}`));
